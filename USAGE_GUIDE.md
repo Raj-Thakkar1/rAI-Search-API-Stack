@@ -76,10 +76,8 @@ Or use JWT middleware, API keys, or OAuth2 with a reverse proxy.
   "enable_synthesis": false,
   "synthesis_top_k_chunks": 12,
   "enable_reranking": true,
-  "rerank_top_k": 5,
   "enable_chunking": true,
-  "chunking_strategy": "hybrid",
-  "target_chunk_size": 350
+  "chunking_strategy": "hybrid"
 }
 ```
 
@@ -250,6 +248,19 @@ Or use JWT middleware, API keys, or OAuth2 with a reverse proxy.
   "message": "Cache cleared successfully"
 }
 ```
+
+**Status Codes**:
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 500 | Failed to clear (e.g., permission issue) |
+
+**Use Cases**:
+- Before deploying a fix (invalidate stale results)
+- Freeing up disk space
+- Testing with fresh data
+- Resetting after modifying target websites
 
 **Status Codes**:
 

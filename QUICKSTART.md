@@ -95,6 +95,11 @@ playwright install chromium
 ```bash
 python main.py
 ```
+*Do not use `uvicorn main:app` directly from the CLI on Windows. `python main.py` ensures the correct AsyncIO event loop is loaded for Playwright.*
+
+---
+
+## ✅ Verification
 
 Expected output:
 
@@ -274,6 +279,7 @@ Response:
 
 If you prefer Docker:
 
+**Linux/Mac (Curl):**
 ```bash
 # Build image
 docker build -t rai-search-api:latest .
