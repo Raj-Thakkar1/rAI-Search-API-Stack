@@ -35,6 +35,7 @@ from lxml import html as lhtml
 from starlette.responses import StreamingResponse
 from starlette.responses import JSONResponse
 from starlette.responses import FileResponse
+from contextlib import asynccontextmanager
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -48,7 +49,30 @@ from rag_chunker import RAGChunker, Chunk
 from reranker import SemanticReranker
 from synthesis import SynthesisChunk, SynthesisService, GeminiSynthesisProvider, OpenAISynthesisProvider, ZaiSynthesisProvider
 
-# Event loop policy is handled in __main__ for Windows/Playwright compatibility
+# Windows Event Loop Policy for Playwright compatibility
+# This must be set BEFORE any event loop is created (including by uvicorn)
+# Note: Playwright requires WindowsProactorEventLoopPolicy for subprocess support
+if sys.platform.startswith("win"):
+    try:
+        # Import nest_asyncio to allow nested event loops on Windows
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        logger_temp = logging.getLogger("DeepSearchAPI")
+        logger_temp.info("Set WindowsProactorEventLoopPolicy with nest_asyncio for Playwright compatibility")
+    except ImportError:
+        # Fallback if nest_asyncio is not installed
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            logger_temp = logging.getLogger("DeepSearchAPI")
+            logger_temp.warning("nest_asyncio not found - Playwright may have issues. Install with: pip install nest-asyncio")
+        except Exception as e:
+            logger_temp = logging.getLogger("DeepSearchAPI")
+            logger_temp.warning(f"Failed to set WindowsProactorEventLoopPolicy: {e}")
+    except Exception as e:
+        logger_temp = logging.getLogger("DeepSearchAPI")
+        logger_temp.warning(f"Failed to configure event loop for Playwright: {e}")
 
 # --- LOGGING ---
 logging.basicConfig(
@@ -967,10 +991,30 @@ class PipelineOrchestrator:
 
 # --- API SETUP ---
 
+# Global orchestrator instance
+orchestrator: Optional[PipelineOrchestrator] = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    global orchestrator
+    # Startup
+    orchestrator = PipelineOrchestrator(config)
+    await orchestrator.initialize()
+    logger.info("API started")
+    
+    yield
+    
+    # Shutdown
+    if orchestrator:
+        await orchestrator.shutdown()
+    logger.info("API shut down")
+
 app = FastAPI(
     title="Deep Search & Extraction API v3.0",
     description="Generative Answer Engine with deconstruction, reranking, chunking, synthesis, and SSE streaming",
-    version="3.0.0"
+    version="3.0.0",
+    lifespan=lifespan
 )
 
 limiter = Limiter(key_func=get_remote_address)
@@ -981,23 +1025,6 @@ app.add_middleware(SlowAPIMiddleware)
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
-
-orchestrator:  Optional[PipelineOrchestrator] = None
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize orchestrator and resources."""
-    global orchestrator
-    orchestrator = PipelineOrchestrator(config)
-    await orchestrator.initialize()
-    logger.info("API started")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup resources."""
-    if orchestrator:
-        await orchestrator.shutdown()
-    logger.info("API shut down")
 
 @app.post("/search", response_model=AnswerEngineResponse)
 @limiter.limit(os.getenv("RATE_LIMIT", "30/minute"))
@@ -1115,14 +1142,18 @@ async def get_answer_engine_schema():
     return FileResponse(schema_path, media_type="application/schema+json")
 
 if __name__ == "__main__":
-    # Ensure Playwright can spawn subprocesses on Windows.
-    # This must be done before the event loop is created.
-    if sys.platform.startswith("win"):
-        try:
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            logger.info("Set WindowsProactorEventLoopPolicy for Playwright compatibility")
-        except Exception as e:
-            logger.warning(f"Failed to set WindowsProactorEventLoopPolicy: {e}")
-
-    # Use "main:app" string for reload support
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True, log_level="info")
+    # Event loop policy is set at module level for Windows/Playwright compatibility
+    # On Windows, we disable reload mode due to Playwright subprocess limitations with Python 3.12+
+    # See: https://github.com/microsoft/playwright-python/issues/2014
+    
+    import sys
+    is_windows = sys.platform.startswith("win")
+    
+    uvicorn.run(
+        "main:app", 
+        host="127.0.0.1", 
+        port=8000, 
+        reload=True,  # Re-enabled reload as sync playwright fix makes it stable
+        log_level="info", 
+        loop="asyncio"
+    )
