@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  deep-search-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports: 
+      - "8000:8000"
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      CACHE_ENABLED: "true"
+      CACHE_DIR: /app/cache
+      CACHE_TTL: 86400
+      CACHE_MAX_SIZE_MB: 2000
+      PLAYWRIGHT_TIMEOUT: 30
+      MAX_BROWSERS: 4
+      SEARCH_TIMEOUT: 30
+      RERANKER_USE_CLOUD: "true"
+      CHUNKING_STRATEGY: hybrid
+      CHUNK_SIZE: 350
+      DEBUG: "false"
+    volumes:
+      - cache_data:/app/cache
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test:  ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits for 1vCPU, 16GB RAM
+    deploy: 
+      resources:
+        limits: 
+          cpus: '1'
+          memory: 14G
+        reservations:
+          cpus: '0.8'
+          memory: 12G
+
+volumes:
+  cache_data: 
+    driver: local

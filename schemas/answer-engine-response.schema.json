@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/answer-engine-response.schema.json",
+  "title": "AnswerEngineResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "query",
+    "subqueries",
+    "answer",
+    "sources",
+    "total_results",
+    "results",
+    "search_timestamp",
+    "search_duration_seconds",
+    "reranking_enabled",
+    "cache_hit"
+  ],
+  "properties": {
+    "query": { "type": "string", "minLength": 1 },
+    "subqueries": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "answer": {
+      "description": "Synthesized answer text. Inline citations are like [1], [2]. Can be null if synthesis disabled/fails.",
+      "type": ["string", "null"]
+    },
+    "sources": {
+      "description": "Citation registry. Answer citations [n] must reference sources[].id == n.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceItem" }
+    },
+    "total_results": { "type": "integer", "minimum": 0 },
+    "results": {
+      "description": "Rich extracted documents (possibly chunked).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/RichDocument" }
+    },
+    "search_timestamp": { "type": "string", "format": "date-time" },
+    "search_duration_seconds": { "type": "number", "minimum": 0 },
+    "reranking_enabled": { "type": "boolean" },
+    "reranking_status": { "type": ["string", "null"] },
+    "cache_hit": { "type": "boolean" },
+    "graphs": {
+      "description": "Optional structured aggregates derived from results (time series, comparisons, tables, etc.).",
+      "type": ["array", "null"],
+      "items": { "$ref": "#/$defs/GraphSpec" }
+    }
+  },
+  "$defs": {
+    "SourceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "title": { "type": ["string", "null"] },
+        "score": { "type": ["number", "null"] }
+      }
+    },
+    "MediaAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "src"],
+      "properties": {
+        "type": { "type": "string", "enum": ["image", "video", "iframe", "audio"] },
+        "src": { "type": "string" },
+        "alt": { "type": ["string", "null"] }
+      }
+    },
+    "FileDownload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "url", "extension"],
+      "properties": {
+        "text": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "extension": { "type": "string" }
+      }
+    },
+    "SiteNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "text"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "text": { "type": "string" }
+      }
+    },
+    "Chunk": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" }
+      }
+    },
+    "ChunkMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "strategy", "total_chunks", "total_tokens", "message"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "strategy": { "type": "string", "enum": ["markdown", "semantic", "hybrid"] },
+        "total_chunks": { "type": "integer", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 },
+        "message": { "type": "string" }
+      }
+    },
+    "RichDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "title": { "type": ["string", "null"] },
+        "author": { "type": ["string", "null"] },
+        "date": { "type": ["string", "null"] },
+        "sitename": { "type": ["string", "null"] },
+        "fingerprint": { "type": ["string", "null"] },
+        "content_markdown": { "type": ["string", "null"] },
+        "content_html": { "type": ["string", "null"] },
+        "images": { "type": "array", "items": { "$ref": "#/$defs/MediaAsset" } },
+        "videos": { "type": "array", "items": { "$ref": "#/$defs/MediaAsset" } },
+        "tables": { "type": "array", "items": { "type": "string" } },
+        "downloads": { "type": "array", "items": { "$ref": "#/$defs/FileDownload" } },
+        "internal_link_tree": { "type": "array", "items": { "$ref": "#/$defs/SiteNode" } },
+        "external_links": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "chunks": { "type": ["array", "null"], "items": { "$ref": "#/$defs/Chunk" } },
+        "chunking_metadata": { "$ref": "#/$defs/ChunkMetadata" },
+        "reranking_score": { "type": ["number", "null"] }
+      }
+    },
+    "GraphPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": ["string", "number", "integer"] },
+        "y": { "type": ["number", "integer", "null"] },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "GraphSeries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "points"],
+      "properties": {
+        "name": { "type": "string" },
+        "unit": { "type": ["string", "null"] },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GraphPoint" }
+        }
+      }
+    },
+    "GraphSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type", "series", "citations"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["line", "bar", "scatter", "table", "comparison"] },
+        "x_label": { "type": ["string", "null"] },
+        "y_label": { "type": ["string", "null"] },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/GraphSeries" }
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}
